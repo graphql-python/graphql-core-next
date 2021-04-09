@@ -639,7 +639,10 @@ class ExecutionContext:
                 # noinspection PyShadowingNames
                 async def await_result() -> Any:
                     try:
-                        return await result
+                        intermediate_result = await result
+                        if isawaitable(intermediate_result):
+                            return await intermediate_result
+                        return intermediate_result
                     except Exception as error:
                         return error
 
