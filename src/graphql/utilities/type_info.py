@@ -88,6 +88,7 @@ class TypeInfo:
         self._argument: Optional[GraphQLArgument] = None
         self._enum_value: Optional[GraphQLEnumValue] = None
         self._get_field_def = get_field_def_fn or get_field_def
+        self._visit_fns = {}
         if initial_type:
             if is_input_type(initial_type):
                 self._input_type_stack.append(cast(GraphQLInputType, initial_type))
@@ -136,14 +137,22 @@ class TypeInfo:
         return self._enum_value
 
     def enter(self, node: Node) -> None:
-        method = getattr(self, "enter_" + node.kind, None)
+        method = self._get_method("enter", node.kind)
         if method:
             method(node)
 
     def leave(self, node: Node) -> None:
-        method = getattr(self, "leave_" + node.kind, None)
+        method = self._get_method("leave", node.kind)
         if method:
             method()
+
+    def _get_method(self, direction: str, kind: str) -> Optional[Callable[[], None]]:
+        key = (direction, kind)
+        if key not in self._visit_fns:
+            fn = getattr(self, f"{direction}_{kind}", None)
+            self._visit_fns[key] = fn
+        return self._visit_fns[key]
+
 
     # noinspection PyUnusedLocal
     def enter_selection_set(self, node: SelectionSetNode) -> None:
@@ -301,6 +310,7 @@ class TypeInfoVisitor(Visitor):
     """A visitor which maintains a provided TypeInfo."""
 
     def __init__(self, type_info: "TypeInfo", visitor: Visitor):
+        super().__init__()
         self.type_info = type_info
         self.visitor = visitor
 

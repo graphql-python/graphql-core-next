@@ -173,6 +173,9 @@ class Visitor:
     # Provide special return values as attributes
     BREAK, SKIP, REMOVE, IDLE = BREAK, SKIP, REMOVE, IDLE
 
+    def __init__(self):
+        self._visit_fns = {}
+
     def __init_subclass__(cls) -> None:
         """Verify that all defined handlers are valid."""
         super().__init_subclass__()
@@ -197,11 +200,12 @@ class Visitor:
 
     def get_visit_fn(self, kind: str, is_leaving: bool = False) -> Callable:
         """Get the visit function for the given node kind and direction."""
-        method = "leave" if is_leaving else "enter"
-        visit_fn = getattr(self, f"{method}_{kind}", None)
-        if not visit_fn:
-            visit_fn = getattr(self, method, None)
-        return visit_fn
+        key = (kind, is_leaving)
+        if key not in self._visit_fns:
+            method = "leave" if is_leaving else "enter"
+            fn = getattr(self, f"{method}_{kind}", None)
+            self._visit_fns[key] = fn or getattr(self, method, None)
+        return self._visit_fns[key]
 
 
 class Stack(NamedTuple):
@@ -367,14 +371,22 @@ class ParallelVisitor(Visitor):
 
     def __init__(self, visitors: Collection[Visitor]):
         """Create a new visitor from the given list of parallel visitors."""
+        super().__init__()
         self.visitors = visitors
         self.skipping: List[Any] = [None] * len(visitors)
+        self._enter_visit_fns = {}
+        self._leave_visit_fns = {}
 
     def enter(self, node: Node, *args: Any) -> Optional[VisitorAction]:
+        visit_fns = self._enter_visit_fns.get(node.kind)
+        if visit_fns is None:
+            visit_fns = [v.get_visit_fn(node.kind) for v in self.visitors]
+            self._enter_visit_fns[node.kind] = visit_fns
+
         skipping = self.skipping
         for i, visitor in enumerate(self.visitors):
             if not skipping[i]:
-                fn = visitor.get_visit_fn(node.kind)
+                fn = visit_fns[i]
                 if fn:
                     result = fn(node, *args)
                     if result is SKIP or result is False:
@@ -386,10 +398,15 @@ class ParallelVisitor(Visitor):
         return None
 
     def leave(self, node: Node, *args: Any) -> Optional[VisitorAction]:
+        visit_fns = self._leave_visit_fns.get(node.kind)
+        if visit_fns is None:
+            visit_fns = [v.get_visit_fn(node.kind, is_leaving=True) for v in self.visitors]
+            self._leave_visit_fns[node.kind] = visit_fns
+
         skipping = self.skipping
         for i, visitor in enumerate(self.visitors):
             if not skipping[i]:
-                fn = visitor.get_visit_fn(node.kind, is_leaving=True)
+                fn = visit_fns[i]
                 if fn:
                     result = fn(node, *args)
                     if result is BREAK or result is True:

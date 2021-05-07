@@ -221,15 +221,17 @@ class Node:
     """AST nodes"""
 
     # allow custom attributes and weak references (not used internally)
-    __slots__ = "__dict__", "__weakref__", "loc"
+    __slots__ = "__dict__", "__weakref__", "loc", "_hash"
 
     loc: Optional[Location]
 
     kind: str = "ast"  # the kind of the node as a snake_case string
     keys = ["loc"]  # the names of the attributes of this node
 
+
     def __init__(self, **kwargs: Any) -> None:
         """Initialize the node with the given keyword arguments."""
+        self._hash = None
         for key in self.keys:
             value = kwargs.get(key)
             if isinstance(value, list) and not isinstance(value, FrozenList):
@@ -250,7 +252,10 @@ class Node:
         )
 
     def __hash__(self) -> int:
-        return hash(tuple(getattr(self, key) for key in self.keys))
+        if self._hash is None:
+            self._hash = hash(tuple(getattr(self, key) for key in self.keys))
+
+        return self._hash
 
     def __copy__(self) -> "Node":
         """Create a shallow copy of the node."""

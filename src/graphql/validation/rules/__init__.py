@@ -17,6 +17,7 @@ class ASTValidationRule(Visitor):
     context: ASTValidationContext
 
     def __init__(self, context: ASTValidationContext):
+        super().__init__()
         self.context = context
 
     def report_error(self, error: GraphQLError) -> None:
